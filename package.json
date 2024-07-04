@@ -1,0 +1,22 @@
+{
+  "name": "tg-bot",
+  "version": "1.0.0",
+  "description": "My first tg bot",
+  "main": "index.js",
+  "scripts": {
+    "test": "nodemon index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Crybaba/Tg-bot-on-node-js.git"
+  },
+  "author": "Starkov Alexander",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Crybaba/Tg-bot-on-node-js/issues"
+  },
+  "homepage": "https://github.com/Crybaba/Tg-bot-on-node-js#readme",
+  "dependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
