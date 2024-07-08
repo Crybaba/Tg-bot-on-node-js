@@ -1,43 +1,87 @@
 const express = require("express");
-const app = express();
-app.use(express.json());
+const mysql = require('mysql2');
 
-app.get("/static", (req, res) => {
-    const jsonResponse = {
-        header: "Hello",
-        body: "Octagon NodeJS Test"
-    };
-    res.json(jsonResponse);
+const port = 3000;
+const app = express();
+
+app.use(express.json()); // Для обработки JSON в теле запроса
+
+const connection = mysql.createConnection({
+    host: "localhost",
+    port: 3306,
+    user: "root",
+    database: "chatbottests",
+    password: "",
+    charset: "UTF8_GENERAL_CI"
 });
 
-app.get("/dynamic", (req, res) => {
-    
-    const { a, b, c } = req.query;
-    
-    const numberA = parseFloat(a);
-    const numberB = parseFloat(b);
-    const numberC = parseFloat(c);
-
-    if (isNaN(numberA) || isNaN(numberB) || isNaN(numberC)) {
-        
-        const jsonResponse = {
-            header: "Error"
-        };
-        res.json(jsonResponse);
-    } 
-    
-    else {
-  
-        const result = (numberA * numberB * numberC) / 3;
-        const jsonResponse = {
-            header: "Calculated",
-            body: result.toString()
-        };
-        res.json(jsonResponse);
+// Подключение к базе данных
+connection.connect(function(err) {
+    if (err) {
+        return console.error("Error: " + err.message);
+    } else {
+        console.log("Подключение к серверу MySQL успешно установлено");
     }
 });
 
+// Маршрут для получения всех элементов
+app.get('/getAllItems', (req, res) => {
+    connection.query('SELECT * FROM test', (err, results) => {
+        if (err) {
+            return res.status(500).send(err);
+        }
+        res.json(results);
+    });
+});
 
-app.listen(3000, () => {
-    console.log(`Сервер начал прослушивание запросов на порту 3000`);
+// Маршрут для добавления нового элемента
+app.post('/addItem', (req, res) => {
+    const { name, desc } = req.body; // Получаем параметры из тела запроса
+    if (!name || !desc) {
+        return res.status(400).send("Name and description are required");
+    }
+    const query = 'INSERT INTO test (name, `desc`) VALUES (?, ?)';
+    connection.query(query, [name, desc], (err, results) => {
+        if (err) {
+            return res.status(500).send(err);
+        }
+        res.json({ id: results.insertId, name, desc });
+    });
+});
+
+
+// Маршрут для удаления элемента
+app.post('/deleteItem', (req, res) => {
+    const { id } = req.body;
+    if (!id) {
+        return res.status(400).send("ID is required");
+    }
+    const query = 'DELETE FROM test WHERE id = ?';
+    connection.query(query, [id], (err, results) => {
+        if (err) {
+            return res.status(500).send(err);
+        }
+        res.json({ message: `Item with ID ${id} deleted` });
+    });
+});
+
+// Маршрут для обновления элемента
+app.post('/updateItem', (req, res) => {
+    const { id, name, desc } = req.body;
+    if (!id || !name || !desc) {
+        return res.status(400).send("ID, name and description are required");
+    }
+    const query = 'UPDATE test SET name = ?, `desc` = ? WHERE id = ?';
+    connection.query(query, [name, desc, id], (err, results) => {
+        if (err) {
+            return res.status(500).send(err);
+        }
+        res.json({ message: `Item with ID ${id} updated` });
+    });
+});
+
+
+// Запуск сервера
+app.listen(port, () => {
+    console.log(`Сервер начал прослушивание запросов на http://localhost:${port}`);
 });

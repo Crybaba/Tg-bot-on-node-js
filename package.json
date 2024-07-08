@@ -18,6 +18,7 @@
   "homepage": "https://github.com/Crybaba/Tg-bot-on-node-js#readme",
   "dependencies": {
     "express": "^4.19.2",
+    "mysql2": "^3.10.2",
     "nodemon": "^3.1.4"
   }
 }
