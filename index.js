@@ -38,7 +38,7 @@ app.get('/getAllItems', (req, res) => {
 app.post('/addItem', (req, res) => {
     const { name, desc } = req.body; // Получаем параметры из тела запроса
     if (!name || !desc) {
-        return res.status(400).send("Name and description are required");
+        return res.json(null); // Возвращаем null при неправильных параметрах
     }
     const query = 'INSERT INTO test (name, `desc`) VALUES (?, ?)';
     connection.query(query, [name, desc], (err, results) => {
@@ -49,17 +49,19 @@ app.post('/addItem', (req, res) => {
     });
 });
 
-
 // Маршрут для удаления элемента
 app.post('/deleteItem', (req, res) => {
     const { id } = req.body;
     if (!id) {
-        return res.status(400).send("ID is required");
+        return res.json(null); // Возвращаем null при неправильных параметрах
     }
     const query = 'DELETE FROM test WHERE id = ?';
     connection.query(query, [id], (err, results) => {
         if (err) {
             return res.status(500).send(err);
+        }
+        if (results.affectedRows === 0) {
+            return res.json({}); // Возвращаем пустой объект, если элемент не найден
         }
         res.json({ message: `Item with ID ${id} deleted` });
     });
@@ -69,17 +71,19 @@ app.post('/deleteItem', (req, res) => {
 app.post('/updateItem', (req, res) => {
     const { id, name, desc } = req.body;
     if (!id || !name || !desc) {
-        return res.status(400).send("ID, name and description are required");
+        return res.json(null); // Возвращаем null при неправильных параметрах
     }
     const query = 'UPDATE test SET name = ?, `desc` = ? WHERE id = ?';
     connection.query(query, [name, desc, id], (err, results) => {
         if (err) {
             return res.status(500).send(err);
         }
-        res.json({ message: `Item with ID ${id} updated` });
+        if (results.affectedRows === 0) {
+            return res.json({}); // Возвращаем пустой объект, если элемент не найден
+        }
+        res.json({ id, name, desc });
     });
 });
-
 
 // Запуск сервера
 app.listen(port, () => {
