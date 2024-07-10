@@ -11,30 +11,21 @@ app.get("/static", (req, res) => {
 });
 
 app.get("/dynamic", (req, res) => {
-    
     const { a, b, c } = req.query;
-    
-    const numberA = parseFloat(a);
-    const numberB = parseFloat(b);
-    const numberC = parseFloat(c);
+    const values = [a, b, c];
+    const numbers = values.map(value => parseFloat(value));
 
-    if (isNaN(numberA) || isNaN(numberB) || isNaN(numberC)) {
-        
-        const jsonResponse = {
-            header: "Error"
-        };
-        res.json(jsonResponse);
-    } 
-    
-    else {
-  
-        const result = (numberA * numberB * numberC) / 3;
-        const jsonResponse = {
-            header: "Calculated",
-            body: result.toString()
-        };
-        res.json(jsonResponse);
+    for (let number of numbers) {
+        if (isNaN(number)) {
+            return res.json({ header: "Error" });
+        }
     }
+
+    const result = numbers.reduce((acc, number) => acc * number) / 3;
+    res.json({
+        header: "Calculated",
+        body: result.toString()
+    });
 });
 
 
