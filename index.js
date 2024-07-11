@@ -1,6 +1,12 @@
+process.env.NTBA_FIX_350 = 1;
+
 const TelegramBot = require('node-telegram-bot-api');
-const token = '7488860731:AAEOQIjOx720ea2zprp9Ymix5l-DnifQ2ws';
+const token = '7488860731:AAEOQIjOx720ea2zprp9Ymix5l-DnifQ2ws'; // Replace with your bot token
 const mysql = require('mysql2');
+const QRCode = require('qrcode');
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+const path = require('path');
 
 // bot link https://t.me/oktagon_test_bot
 
@@ -29,7 +35,9 @@ const keyboard = [
     [{ text: '/creator' }],
     [{ text: '/randomItem' }],
     [{ text: '/deleteItem' }],
-    [{ text: '/getItemByID' }]
+    [{ text: '/getItemByID' }],
+    [{ text: '!qr' }],
+    [{ text: '!webscr' }]
 ];
 
 const options = {
@@ -38,6 +46,8 @@ const options = {
         resize_keyboard: true
     }
 };
+
+const userContext = {};
 
 // Команда /start для начала работы с ботом и отображения меню
 bot.onText(/\/start/, (msg) => {
@@ -57,6 +67,8 @@ bot.onText(/\/help/, (msg) => {
 - /randomItem - возвращает случайный предмет из БД
 - /deleteItem - удаляет предмет из БД по ID
 - /getItemByID - возвращает предмет из БД по ID
+- !qr - генерирует QR код по тексту или ссылке
+- !webscr - возвращает скриншот сайта по веб-адресу
     `;
     bot.sendMessage(chatId, helpMessage, options);
 });
@@ -96,68 +108,124 @@ bot.onText(/\/randomItem/, (msg) => {
 // Команда /deleteItem отправляет запрос на ввод ID
 bot.onText(/\/deleteItem/, (msg) => {
     const chatId = msg.chat.id;
+    userContext[chatId] = { command: '/deleteItem' };
     bot.sendMessage(chatId, 'Введите ID предмета для удаления:', options);
 });
 
 // Команда /getItemByID отправляет запрос на ввод ID
 bot.onText(/\/getItemByID/, (msg) => {
     const chatId = msg.chat.id;
+    userContext[chatId] = { command: '/getItemByID' };
     bot.sendMessage(chatId, 'Введите ID предмета для получения:', options);
 });
 
-// Обработка ввода ID для команд /getItemByID и /deleteItem
+// Команда !qr отправляет запрос на ввод текста или ссылки
+bot.onText(/!qr/, (msg) => {
+    const chatId = msg.chat.id;
+    userContext[chatId] = { command: '!qr' };
+    bot.sendMessage(chatId, 'Введите текст или ссылку для генерации QR-кода:', options);
+});
+
+// Команда !webscr отправляет запрос на ввод веб-адреса
+bot.onText(/!webscr/, (msg) => {
+    const chatId = msg.chat.id;
+    userContext[chatId] = { command: '!webscr' };
+    bot.sendMessage(chatId, 'Введите веб-адрес для получения скриншота:', options);
+});
+
+// Обработка сообщений
 bot.on('message', (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
 
-    // Если сообщение начинается с цифры, предполагаем, что это ID
-    if (/^\d+$/.test(text)) {
-        const itemId = parseInt(text, 10);
+    // Пропускаем сообщения, которые являются командами
+    if (text.startsWith('/') || text.startsWith('!')) return;
 
-        // Обработка получения предмета по ID
-        if (bot.lastCommand === '/getItemByID') {
-            connection.query('SELECT * FROM test WHERE ID = ?', [itemId], (error, results) => {
-                if (error) {
-                    console.error('Ошибка при выполнении запроса:', error);
-                    bot.sendMessage(chatId, 'Ошибка при получении предмета.', options);
+    if (userContext[chatId] && userContext[chatId].command) {
+        const command = userContext[chatId].command;
+
+        if (command === '/getItemByID' || command === '/deleteItem') {
+            const itemId = parseInt(text, 10);
+
+            if (isNaN(itemId)) {
+                bot.sendMessage(chatId, 'Некорректный ID. Попробуйте снова.', options);
+                return;
+            }
+
+            if (command === '/getItemByID') {
+                connection.query('SELECT * FROM test WHERE ID = ?', [itemId], (error, results) => {
+                    if (error) {
+                        console.error('Ошибка при выполнении запроса:', error);
+                        bot.sendMessage(chatId, 'Ошибка при получении предмета.', options);
+                        return;
+                    }
+
+                    if (results.length > 0) {
+                        const item = results[0];
+                        console.log('Полученный предмет:', item);
+                        bot.sendMessage(chatId, `(${item.id}) - ${item.name}: ${item.desc}`, options);
+                    } else {
+                        bot.sendMessage(chatId, 'Предмета с таким ID не существует.', options);
+                    }
+                });
+            }
+
+            if (command === '/deleteItem') {
+                connection.query('DELETE FROM test WHERE ID = ?', [itemId], (error, results) => {
+                    if (error) {
+                        console.error('Ошибка при выполнении запроса:', error);
+                        bot.sendMessage(chatId, 'Ошибка при удалении предмета.', options);
+                        return;
+                    }
+
+                    if (results.affectedRows > 0) {
+                        bot.sendMessage(chatId, 'Удачно.', options);
+                    } else {
+                        bot.sendMessage(chatId, 'Ошибка: предмета с таким ID не существует.', options);
+                    }
+                });
+            }
+        } else if (command === '!qr') {
+            QRCode.toFile(`qr-${chatId}.png`, text, {
+                color: {
+                    dark: '#000',  // Цвет самого QR
+                    light: '#FFF'  // Цвет фона
+                }
+            }, (err) => {
+                if (err) {
+                    console.error('Ошибка при создании QR-кода:', err);
+                    bot.sendMessage(chatId, 'Ошибка при создании QR-кода.', options);
                     return;
                 }
-
-                if (results.length > 0) {
-                    const item = results[0];
-                    console.log('Полученный предмет:', item);
-                    bot.sendMessage(chatId, `(${item.id}) - ${item.name}: ${item.desc}`, options);
-                } else {
-                    bot.sendMessage(chatId, 'Предмета с таким ID не существует.', options);
-                }
+                bot.sendPhoto(chatId, `qr-${chatId}.png`, { caption: 'Ваш QR-код', contentType: 'image/png' }, options)
+                    .then(() => {
+                        fs.unlinkSync(`qr-${chatId}.png`); // Delete the file after sending
+                    });
             });
+        } else if (command === '!webscr') {
+            const url = text;
+            (async () => {
+                try {
+                    const browser = await puppeteer.launch();
+                    const page = await browser.newPage();
+                    await page.goto(url, { waitUntil: 'networkidle2' });
+                    const screenshotPath = `screenshot-${chatId}.png`;
+                    await page.screenshot({ path: screenshotPath, fullPage: true });
+                    await browser.close();
+
+                    bot.sendPhoto(chatId, screenshotPath, { caption: 'Ваш скриншот', contentType: 'image/png' }, options)
+                        .then(() => {
+                            fs.unlinkSync(screenshotPath); // Delete the file after sending
+                        });
+                } catch (error) {
+                    console.error('Ошибка при создании скриншота:', error);
+                    bot.sendMessage(chatId, 'Ошибка при создании скриншота.', options);
+                }
+            })();
         }
 
-        // Обработка удаления предмета по ID
-        if (bot.lastCommand === '/deleteItem') {
-            connection.query('DELETE FROM test WHERE ID = ?', [itemId], (error, results) => {
-                if (error) {
-                    console.error('Ошибка при выполнении запроса:', error);
-                    bot.sendMessage(chatId, 'Ошибка при удалении предмета.', options);
-                    return;
-                }
-
-                if (results.affectedRows > 0) {
-                    bot.sendMessage(chatId, 'Удачно.', options);
-                } else {
-                    bot.sendMessage(chatId, 'Ошибка: предмета с таким ID не существует.', options);
-                }
-            });
-        }
-    } else if (!msg.text.startsWith('/')) {
-        // Если сообщение не является командой и не числом (ID)
+        delete userContext[chatId];
+    } else if (!text.startsWith('/')) {
         bot.sendMessage(chatId, 'Ошибка. Введите команду или корректный ID.', options);
-    }
-});
-
-// Запоминаем последнюю команду для корректной обработки ID
-bot.on('message', (msg) => {
-    if (msg.text.startsWith('/getItemByID') || msg.text.startsWith('/deleteItem')) {
-        bot.lastCommand = msg.text.split(' ')[0];
     }
 });
