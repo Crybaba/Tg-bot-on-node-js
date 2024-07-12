@@ -7,6 +7,7 @@ const QRCode = require('qrcode');
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
+const { setIntervalAsync } = require('set-interval-async/dynamic');
 
 // bot link https://t.me/oktagon_test_bot
 
@@ -133,13 +134,22 @@ bot.onText(/!webscr/, (msg) => {
     bot.sendMessage(chatId, 'Введите веб-адрес для получения скриншота:', options);
 });
 
-// Обработка сообщений
+// Обновление записи в таблице Users при получении сообщения
 bot.on('message', (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
 
     // Пропускаем сообщения, которые являются командами
     if (text.startsWith('/') || text.startsWith('!')) return;
+
+    // Обновляем или вставляем запись в таблице Users
+    const query = 'INSERT INTO Users (ID, last_message) VALUES (?, ?) ON DUPLICATE KEY UPDATE last_message = VALUES(last_message)';
+    const values = [chatId, new Date()];
+    connection.query(query, values, (error) => {
+        if (error) {
+            console.error('Ошибка при обновлении таблицы Users:', error);
+        }
+    });
 
     if (userContext[chatId] && userContext[chatId].command) {
         const command = userContext[chatId].command;
@@ -229,3 +239,34 @@ bot.on('message', (msg) => {
         bot.sendMessage(chatId, 'Ошибка. Введите команду или корректный ID.', options);
     }
 });
+
+// Таймер для проверки даты последнего сообщения пользователей
+setIntervalAsync(async () => {
+    const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000); // Одну минуту назад
+
+    connection.query('SELECT ID FROM users WHERE last_message < ?', [twoDaysAgo], (error, results) => {
+        if (error) {
+            console.error('Ошибка при выполнении запроса:', error);
+            return;
+        }
+
+        results.forEach(user => {
+            const chatId = user.ID;
+            // Отправка случайного предмета пользователю
+            connection.query('SELECT * FROM test ORDER BY RAND() LIMIT 1', (error, results) => {
+                if (error) {
+                    console.error('Ошибка при выполнении запроса:', error);
+                    return;
+                }
+
+                if (results.length > 0) {
+                    const item = results[0];
+                    console.log('Отправка предмета пользователю:', chatId, item);
+                    bot.sendMessage(chatId, `(${item.id}) - ${item.name}: ${item.desc}`);
+                }
+            });
+        });
+    });
+}, 10 * 1000); // Проверка каждые 10 секунд
+
