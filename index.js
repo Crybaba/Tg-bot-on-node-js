@@ -39,6 +39,9 @@ const options = {
     }
 };
 
+// Создаем глобальную переменную для кеширования сообщений
+let messagesCache = {};
+
 // Команда /start для начала работы с ботом и отображения меню
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
@@ -97,12 +100,14 @@ bot.onText(/\/randomItem/, (msg) => {
 bot.onText(/\/deleteItem/, (msg) => {
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, 'Введите ID предмета для удаления:', options);
+    messagesCache[chatId] = '/deleteItem';
 });
 
 // Команда /getItemByID отправляет запрос на ввод ID
 bot.onText(/\/getItemByID/, (msg) => {
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, 'Введите ID предмета для получения:', options);
+    messagesCache[chatId] = '/getItemByID';
 });
 
 // Обработка ввода ID для команд /getItemByID и /deleteItem
@@ -110,12 +115,11 @@ bot.on('message', (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
 
-    // Если сообщение начинается с цифры, предполагаем, что это ID
     if (/^\d+$/.test(text)) {
         const itemId = parseInt(text, 10);
 
         // Обработка получения предмета по ID
-        if (bot.lastCommand === '/getItemByID') {
+        if (messagesCache[chatId] === '/getItemByID') {
             connection.query('SELECT * FROM test WHERE ID = ?', [itemId], (error, results) => {
                 if (error) {
                     console.error('Ошибка при выполнении запроса:', error);
@@ -134,7 +138,7 @@ bot.on('message', (msg) => {
         }
 
         // Обработка удаления предмета по ID
-        if (bot.lastCommand === '/deleteItem') {
+        if (messagesCache[chatId] === '/deleteItem') {
             connection.query('DELETE FROM test WHERE ID = ?', [itemId], (error, results) => {
                 if (error) {
                     console.error('Ошибка при выполнении запроса:', error);
@@ -149,15 +153,11 @@ bot.on('message', (msg) => {
                 }
             });
         }
+
+        // Очистка кеша после выполнения команды
+        delete messagesCache[chatId];
     } else if (!msg.text.startsWith('/')) {
         // Если сообщение не является командой и не числом (ID)
         bot.sendMessage(chatId, 'Ошибка. Введите команду или корректный ID.', options);
-    }
-});
-
-// Запоминаем последнюю команду для корректной обработки ID
-bot.on('message', (msg) => {
-    if (msg.text.startsWith('/getItemByID') || msg.text.startsWith('/deleteItem')) {
-        bot.lastCommand = msg.text.split(' ')[0];
     }
 });
